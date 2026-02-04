@@ -18,10 +18,10 @@ ping_sound.set_volume(0.1)
 # Set up display
 # Set up display
 #width, height = 1280, 720
-width, height = 1920, 1080
-ratio = width / 1280
+width, height = 2400, 1080 # Widened screen
+ratio = 1.5 # Fixed ratio (based on original 1920 width) so elements don't scale up
 screen = pygame.display.set_mode((width, height))
-pygame.display.set_caption("Plinko Game")
+pygame.display.set_caption("PLINKO")
 
 # UI Layout Settings
 sidebar_width = int(300 * ratio)
@@ -198,6 +198,8 @@ balls = []
 hit_bins = []
 del_balls_x = []
 fall_speed_increment = 0.6 * ratio
+space_cooldown = 0 # Timer for continuous spacebar spawning
+last_space_time = 0 
 # balls_at_once removed (forcing 1)
 
 # Set Plot defaults
@@ -587,20 +589,26 @@ def draw_native_pl_graph(surface, rect, x_data, y_data):
                     
                     if val1 >= 0: # Positive to Negative
                         pygame.draw.polygon(surface, dark_green, [p1, p_cross, (p1[0], zero_y)])
-                        pygame.draw.line(surface, green, p1, p_cross, 2)
+                        pygame.draw.aaline(surface, green, p1, p_cross, 2)
                         pygame.draw.polygon(surface, dark_red, [p_cross, p2, (p2[0], zero_y)])
-                        pygame.draw.line(surface, red, p_cross, p2, 2)
+                        pygame.draw.aaline(surface, red, p_cross, p2, 2)
                     else: # Negative to Positive
                         pygame.draw.polygon(surface, dark_red, [p1, p_cross, (p1[0], zero_y)])
-                        pygame.draw.line(surface, red, p1, p_cross, 2)
+                        pygame.draw.aaline(surface, red, p1, p_cross, 2)
                         pygame.draw.polygon(surface, dark_green, [p_cross, p2, (p2[0], zero_y)])
-                        pygame.draw.line(surface, green, p_cross, p2, 2)
+                        pygame.draw.aaline(surface, green, p_cross, p2, 2)
 
     # Draw zero line
-    pygame.draw.line(surface, gray, (rect.x, zero_y), (rect.right, zero_y), 1)
+    pygame.draw.aaline(surface, gray, (rect.x, zero_y), (rect.right, zero_y), 1)
+    pygame.draw.line(surface, gray, rect.bottomleft, rect.topleft, 2) # Border doesn't need AA as much, keep sharp
     
-    # Draw border
-    pygame.draw.line(surface, gray, rect.bottomleft, rect.topleft, 2)
+    # Draw "Created by Mario Sumali"
+    credit_font = pygame.font.SysFont('Arial', int(12 * ratio), bold=True)
+    credit_surf = credit_font.render("Created by Mario Sumali", True, (200, 200, 200))
+    # Position bottom left of game area, or just bottom left of screen?
+    # User said "add a created by...", usually subtle.
+    # Let's put it on the Left Sidebar at the bottom.
+    screen.blit(credit_surf, (15 * ratio, height - 30 * ratio))
 
 
 # Complete board reset
@@ -662,22 +670,30 @@ while running:
             if event.key == pygame.K_ESCAPE:
                 pygame.quit()
                 sys.exit()
-            elif event.key == pygame.K_SPACE:
-                if money - bet < 0: 
-                    error_sound.play()
-                else:
-                    # Drop a ball 
-                    center_x = sidebar_width + game_width // 2
-                    start_x = random.randint(center_x - pin_spacing + pin_radius, center_x + pin_spacing - pin_radius)
-                    balls.append([start_x, random.randint(-2*ball_radius,-ball_radius), 0, 0])
-                    money -= bet
-                    wagered += bet
-                    click_sound.play()
+            # Spacebar removed from KEYDOWN to allow holding (handled in loop below)
             elif event.key == pygame.K_r:
                 reset_board()
         handle_sliders(event)
         handle_text_input(event)
         handle_money_input(event)
+
+    # Handle Continuous Spacebar
+    keys = pygame.key.get_pressed()
+    current_time = pygame.time.get_ticks()
+    if keys[pygame.K_SPACE]:
+        if current_time - last_space_time > 150: # 150ms delay
+            if money - bet >= 0:
+                center_x = sidebar_width + game_width // 2
+                start_x = random.randint(center_x - pin_spacing + pin_radius, center_x + pin_spacing - pin_radius)
+                balls.append([start_x, random.randint(-2*ball_radius,-ball_radius), 0, 0])
+                money -= bet
+                wagered += bet
+                click_sound.play()
+                last_space_time = current_time
+            else:
+                if current_time - last_space_time > 500: # throttling error sound
+                    error_sound.play()
+                    last_space_time = current_time
 
     frame_counter += 1
 
